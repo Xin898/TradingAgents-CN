@@ -69,6 +69,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from app.services.quotes_ingestion_service import QuotesIngestionService
 from app.routers import paper as paper_router
+from platform_integration.router import router as platform_integration_router
 
 
 def get_version() -> str:
@@ -728,6 +729,7 @@ app.include_router(financial_data.router, tags=["financial-data"])
 app.include_router(news_data.router, tags=["news-data"])
 app.include_router(social_media.router, tags=["social-media"])
 app.include_router(internal_messages.router, tags=["internal-messages"])
+app.include_router(platform_integration_router)
 
 
 @app.get("/")

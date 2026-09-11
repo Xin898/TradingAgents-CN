@@ -8,6 +8,83 @@
 
 ---
 
+## 🧩 在总体交易平台中的定位
+
+> 本仓库基于现有 TradingAgents-CN / 上游开源能力进行学习、架构研究和扩展。原项目的版权、许可证、专有目录和商业授权要求以本 README 下方及仓库 LICENSE/COPYRIGHT 文件中的原始说明为准。
+
+在总体架构中，TradingAgents-CN 被定位为 **AI Market Intelligence / Decision Support SCS**，负责市场研究和结构化分析，不负责最终交易决策、风险审批或订单执行。
+
+### 主要职责
+
+- 汇集市场数据、新闻、基本面等研究输入
+- 使用多智能体/LLM 生成市场分析
+- 对外提供版本化的 Analysis API / AnalysisSignal
+- 输出方向、置信信息、风险因素、数据时间和有效期等决策支持信息
+- 管理 LLM Provider、模型路由、超时、重试和后续成本/Token 可观测能力
+- 保持 AI 分析与确定性的交易执行边界
+
+### 总体平台架构
+
+```text
+Market Data / News / Fundamentals
+              │
+              ▼
+       TradingAgents-CN
+    AI Market Intelligence
+              │
+       AnalysisSignal / API
+        ┌─────┴─────┐
+        ▼           ▼
+   StockTrader   CrypTrader
+      │              │
+    Alpaca          Binance
+      │              │
+      └── trading ───┘
+          events
+            │
+            ▼
+       TradeMonitor
+```
+
+核心原则：
+
+```text
+AI Analysis / Signal != Trading Decision
+```
+
+TradingAgents-CN 不直接向 Alpaca/Binance 下单。下游 Trader SCS 必须结合实时市场状态、Strategy、Portfolio 和确定性的 Risk Rules 后才能形成订单。
+
+### 下游契约方向
+
+计划向下游提供类似以下的版本化结构化结果：
+
+```text
+AnalysisSignal
+├── analysisId
+├── instrument
+├── direction / market view
+├── confidence / score
+├── risk factors
+├── dataTimestamp
+├── validUntil
+└── modelVersion
+```
+
+下游系统必须自行处理 freshness、版本、重复消息和过期分析。
+
+### 与其他 SCS 的边界
+
+| SCS | 职责 |
+|---|---|
+| TradingAgents-CN | AI 市场研究、分析与 Decision Support |
+| StockTrader | 股票 Strategy、Risk、OMS、Portfolio 与 Alpaca 执行 |
+| CrypTrader | Crypto Strategy、Risk、OMS、Portfolio 与 Binance 执行 |
+| TradeMonitor | 交易业务监控、告警、PnL/Exposure 视图与 Reconciliation |
+
+SCS 之间不共享数据库，通过显式 API 或版本化事件契约集成。
+
+---
+
 ## ⚠️ 重要版权声明与授权说明
 
 ### 🚨 版权侵权警告

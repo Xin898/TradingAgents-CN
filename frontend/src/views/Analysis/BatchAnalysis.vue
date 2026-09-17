@@ -290,6 +290,7 @@
 </template>
 
 <script setup lang="ts">
+import { hasSelectedModels } from '@/utils/analysisModels'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Files, TrendCharts, Check, Close } from '@element-plus/icons-vue'
@@ -313,8 +314,8 @@ const invalidCodes = ref<string[]>([])
 
 // 模型设置
 const modelSettings = ref({
-  quickAnalysisModel: 'qwen-turbo',
-  deepAnalysisModel: 'qwen-max'
+  quickAnalysisModel: '',
+  deepAnalysisModel: ''
 })
 
 // 可用的模型列表（从配置中获取）
@@ -372,37 +373,15 @@ const clearStocks = () => {
 // 初始化模型设置
 const initializeModelSettings = async () => {
   try {
-    const sortModelsByNewest = (configs: any[]) => {
-      const getTimestamp = (config: any) => {
-        const timeValue = config.created_at || config.updated_at
-        const timestamp = timeValue ? new Date(timeValue).getTime() : 0
-        return Number.isNaN(timestamp) ? 0 : timestamp
-      }
-
-      return [...configs].sort((a, b) => getTimestamp(b) - getTimestamp(a))
-    }
-
-    // 获取默认模型
-    const defaultModels = await configApi.getDefaultModels()
-    modelSettings.value.quickAnalysisModel = defaultModels.quick_analysis_model
-    modelSettings.value.deepAnalysisModel = defaultModels.deep_analysis_model
-
-    // 获取所有可用的模型列表
-    const llmConfigs = await configApi.getLLMConfigs()
-    availableModels.value = sortModelsByNewest(
-      llmConfigs.filter((config: any) => config.enabled)
-    )
-
-    console.log('✅ 加载模型配置成功:', {
-      quick: modelSettings.value.quickAnalysisModel,
-      deep: modelSettings.value.deepAnalysisModel,
-      available: availableModels.value.length
-    })
+    const options = await configApi.getAnalysisModelOptions()
+    availableModels.value = options.models
+    modelSettings.value.quickAnalysisModel = options.quickModel
+    modelSettings.value.deepAnalysisModel = options.deepModel
   } catch (error) {
-    console.error('加载默认模型配置失败:', error)
-    // 使用硬编码的默认值
-    modelSettings.value.quickAnalysisModel = 'qwen-plus'
-    modelSettings.value.deepAnalysisModel = 'qwen-max'
+    availableModels.value = []
+    modelSettings.value.quickAnalysisModel = ''
+    modelSettings.value.deepAnalysisModel = ''
+    ElMessage.error('加载厂家和模型配置失败，请稍后重试')
   }
 }
 
@@ -477,6 +456,11 @@ const validateStocks = async () => {
 }
 
 const submitBatchAnalysis = async () => {
+  if (!hasSelectedModels(availableModels.value, modelSettings.value.quickAnalysisModel, modelSettings.value.deepAnalysisModel)) {
+    ElMessage.warning('请先选择已配置厂家的快速模型和深度模型')
+    return
+  }
+
   if (!batchForm.title) {
     ElMessage.warning('请输入批次标题')
     return

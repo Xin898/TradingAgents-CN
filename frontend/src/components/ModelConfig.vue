@@ -11,39 +11,7 @@
               <el-icon class="help-icon"><InfoFilled /></el-icon>
             </el-tooltip>
           </div>
-          <el-select v-model="localQuickModel" size="small" style="width: 100%" filterable @change="onQuickModelChange">
-            <el-option
-              v-for="model in availableModels"
-              :key="`quick-${model.provider}/${model.model_name}`"
-              :label="model.model_display_name || model.model_name"
-              :value="model.model_name"
-            >
-              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                <span style="flex: 1;">{{ model.model_display_name || model.model_name }}</span>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <!-- 能力等级徽章 -->
-                  <el-tag
-                    v-if="model.capability_level"
-                    :type="getCapabilityTagType(model.capability_level)"
-                    size="small"
-                    effect="plain"
-                  >
-                    {{ getCapabilityText(model.capability_level) }}
-                  </el-tag>
-                  <!-- 角色标签 -->
-                  <el-tag
-                    v-if="isQuickAnalysisRole(model.suitable_roles)"
-                    type="success"
-                    size="small"
-                    effect="plain"
-                  >
-                    ⚡快速
-                  </el-tag>
-                  <span style="font-size: 12px; color: #909399;">{{ model.provider }}</span>
-                </div>
-              </div>
-            </el-option>
-          </el-select>
+          <ConfiguredModelSelector v-model="localQuickModel" :available-models="availableModels" @update:model-value="onQuickModelChange" />
         </div>
 
         <div class="model-item">
@@ -53,39 +21,7 @@
               <el-icon class="help-icon"><InfoFilled /></el-icon>
             </el-tooltip>
           </div>
-          <el-select v-model="localDeepModel" size="small" style="width: 100%" filterable @change="onDeepModelChange">
-            <el-option
-              v-for="model in availableModels"
-              :key="`deep-${model.provider}/${model.model_name}`"
-              :label="model.model_display_name || model.model_name"
-              :value="model.model_name"
-            >
-              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                <span style="flex: 1;">{{ model.model_display_name || model.model_name }}</span>
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <!-- 能力等级徽章 -->
-                  <el-tag
-                    v-if="model.capability_level"
-                    :type="getCapabilityTagType(model.capability_level)"
-                    size="small"
-                    effect="plain"
-                  >
-                    {{ getCapabilityText(model.capability_level) }}
-                  </el-tag>
-                  <!-- 角色标签 -->
-                  <el-tag
-                    v-if="isDeepAnalysisRole(model.suitable_roles)"
-                    type="warning"
-                    size="small"
-                    effect="plain"
-                  >
-                    🧠深度
-                  </el-tag>
-                  <span style="font-size: 12px; color: #909399;">{{ model.provider }}</span>
-                </div>
-              </div>
-            </el-option>
-          </el-select>
+          <ConfiguredModelSelector v-model="localDeepModel" :available-models="availableModels" @update:model-value="onDeepModelChange" />
         </div>
       </div>
 
@@ -119,6 +55,9 @@
 </template>
 
 <script setup lang="ts">
+import ConfiguredModelSelector from './ConfiguredModelSelector.vue'
+import { hasSelectedModels } from '@/utils/analysisModels'
+
 import { ref, watch, onMounted } from 'vue'
 import { InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -292,6 +231,10 @@ const checkModelSuitability = async () => {
  * 应用推荐的模型配置
  */
 const applyRecommendedModels = () => {
+  if (!hasSelectedModels(props.availableModels, modelRecommendation.value?.quickModel || '', modelRecommendation.value?.deepModel || '')) {
+    ElMessage.warning('推荐模型尚未配置，请先启用对应厂家和模型')
+    return
+  }
   if (modelRecommendation.value?.quickModel && modelRecommendation.value?.deepModel) {
     localQuickModel.value = modelRecommendation.value.quickModel
     localDeepModel.value = modelRecommendation.value.deepModel

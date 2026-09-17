@@ -70,6 +70,7 @@ RUN pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple && \
 
 # 复制后端代码和必需模块
 COPY app ./app
+COPY platform_integration ./platform_integration
 COPY tradingagents ./tradingagents
 COPY config ./config
 COPY scripts ./scripts

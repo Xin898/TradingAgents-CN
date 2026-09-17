@@ -501,6 +501,11 @@ def create_analysis_config(
         research_depth = "标准"
 
     # 从DEFAULT_CONFIG开始，完全复制web目录的逻辑
+    if not isinstance(quick_model, str) or not quick_model.strip():
+        raise ValueError("快速分析模型不能为空，请选择已配置的模型")
+    if not isinstance(deep_model, str) or not deep_model.strip():
+        raise ValueError("深度分析模型不能为空，请选择已配置的模型")
+    quick_model, deep_model = quick_model.strip(), deep_model.strip()
     config = DEFAULT_CONFIG.copy()
     config["llm_provider"] = llm_provider
     config["deep_think_llm"] = deep_model
@@ -1219,12 +1224,10 @@ class SimpleAnalysisService:
                     for warning in validation["warnings"]:
                         logger.warning(warning)
 
-                    # 如果模型不合适，自动切换到推荐模型
-                    logger.info(f"🔄 自动切换到推荐模型...")
-                    quick_model, deep_model = capability_service.recommend_models_for_depth(
-                        research_depth
-                    )
-                    logger.info(f"✅ 已切换: quick={quick_model}, deep={deep_model}")
+                    # Explicit selections must never be replaced by an unrelated
+                    # provider or empty system defaults. Report the configuration
+                    # problem so the user can choose an appropriate model.
+                    raise ValueError("所选模型不满足分析要求：" + "；".join(validation["warnings"]))
                 else:
                     # 即使验证通过，也记录警告信息
                     for warning in validation["warnings"]:

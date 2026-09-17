@@ -1,5 +1,7 @@
-"""Stable integration boundary between TradingAgents and downstream Trader SCSs."""
+"""Stable integration boundary between TradingAgents and downstream Trader SCSs.
 
-from .router import router
+Keep package import lightweight: importing contracts/mappers must not initialize the
+FastAPI router or the full application dependency graph.
+"""
 
-__all__ = ["router"]
+__all__ = []

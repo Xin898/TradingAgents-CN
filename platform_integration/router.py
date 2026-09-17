@@ -10,7 +10,8 @@ from .contracts import AnalysisAccepted, AnalysisJobStatus, AnalysisRequest, Ana
 from .service import platform_integration_service
 
 
-router = APIRouter(prefix="/api/v1/platform", tags=["platform-integration"])
+# app.main mounts the aggregate API router under /api.
+router = APIRouter(prefix="/v1/platform", tags=["platform-integration"])
 
 
 @router.post("/analyses", response_model=AnalysisAccepted, status_code=status.HTTP_202_ACCEPTED)

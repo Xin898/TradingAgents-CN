@@ -367,39 +367,7 @@
                         <el-icon class="help-icon"><InfoFilled /></el-icon>
                       </el-tooltip>
                     </div>
-                    <el-select v-model="modelSettings.quickAnalysisModel" size="small" style="width: 100%" filterable>
-                      <el-option
-                        v-for="model in availableModels"
-                        :key="`quick-${model.provider}/${model.model_name}`"
-                        :label="model.model_display_name || model.model_name"
-                        :value="model.model_name"
-                      >
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                          <span style="flex: 1;">{{ model.model_display_name || model.model_name }}</span>
-                          <div style="display: flex; align-items: center; gap: 4px;">
-                            <!-- 能力等级徽章 -->
-                            <el-tag
-                              v-if="model.capability_level"
-                              :type="getCapabilityTagType(model.capability_level)"
-                              size="small"
-                              effect="plain"
-                            >
-                              {{ getCapabilityText(model.capability_level) }}
-                            </el-tag>
-                            <!-- 角色标签 -->
-                            <el-tag
-                              v-if="isQuickAnalysisRole(model.suitable_roles)"
-                              type="success"
-                              size="small"
-                              effect="plain"
-                            >
-                              ⚡快速
-                            </el-tag>
-                            <span style="font-size: 12px; color: #909399;">{{ model.provider }}</span>
-                          </div>
-                        </div>
-                      </el-option>
-                    </el-select>
+                    <ConfiguredModelSelector v-model="modelSettings.quickAnalysisModel" :available-models="availableModels" />
                   </div>
 
                   <div class="model-item">
@@ -409,7 +377,7 @@
                         <el-icon class="help-icon"><InfoFilled /></el-icon>
                       </el-tooltip>
                     </div>
-                    <DeepModelSelector v-model="modelSettings.deepAnalysisModel" :available-models="availableModels" type="deep" size="small" width="100%" />
+                    <ConfiguredModelSelector v-model="modelSettings.deepAnalysisModel" :available-models="availableModels" />
                   </div>
                 </div>
 
@@ -688,6 +656,7 @@
 </template>
 
 <script setup lang="ts">
+import { hasSelectedModels } from '@/utils/analysisModels'
 import { ref, reactive, onMounted, onUnmounted, computed, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, ElInputNumber } from 'element-plus'
@@ -711,7 +680,7 @@ import { stocksApi } from '@/api/stocks'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { configApi } from '@/api/config'
-import DeepModelSelector from '@/components/DeepModelSelector.vue'
+import ConfiguredModelSelector from '@/components/ConfiguredModelSelector.vue'
 import { ANALYSTS, convertAnalystNamesToIds } from '@/constants/analysts'
 import { marked } from 'marked'
 import { recommendModels } from '@/api/modelCapabilities'
@@ -783,8 +752,8 @@ const generateStepsFromBackend = (backendSteps: any[]) => {
 
 // 模型设置
 const modelSettings = ref({
-  quickAnalysisModel: 'qwen-turbo',
-  deepAnalysisModel: 'qwen-max'
+  quickAnalysisModel: '',
+  deepAnalysisModel: ''
 })
 
 // 可用的模型列表（从配置中获取）
@@ -906,6 +875,11 @@ const toggleAnalyst = (analystName: string) => {
 
 // 提交分析
 const submitAnalysis = async () => {
+  if (!hasSelectedModels(availableModels.value, modelSettings.value.quickAnalysisModel, modelSettings.value.deepAnalysisModel)) {
+    ElMessage.warning('请先选择已配置厂家的快速模型和深度模型')
+    return
+  }
+
   const stockCode = analysisForm.stockCode.trim()
   if (!stockCode) {
     ElMessage.warning('请输入股票代码')
@@ -1878,41 +1852,15 @@ const updateAnalysisSteps = (status: any) => {
 // 初始化模型设置
 const initializeModelSettings = async () => {
   try {
-    const sortModelsByNewest = (configs: any[]) => {
-      const getTimestamp = (config: any) => {
-        const timeValue = config.created_at || config.updated_at
-        const timestamp = timeValue ? new Date(timeValue).getTime() : 0
-        return Number.isNaN(timestamp) ? 0 : timestamp
-      }
-
-      return [...configs].sort((a, b) => getTimestamp(b) - getTimestamp(a))
-    }
-
-    // 获取默认模型
-    const defaultModels = await configApi.getDefaultModels()
-    modelSettings.value.quickAnalysisModel = defaultModels.quick_analysis_model
-    modelSettings.value.deepAnalysisModel = defaultModels.deep_analysis_model
-
-    // 获取所有可用的模型列表
-    const llmConfigs = await configApi.getLLMConfigs()
-    availableModels.value = sortModelsByNewest(
-      llmConfigs.filter((config: any) => config.enabled)
-    )
-
-    console.log('✅ 加载模型配置成功:', {
-      quick: modelSettings.value.quickAnalysisModel,
-      deep: modelSettings.value.deepAnalysisModel,
-      available: availableModels.value.length
-    })
-    console.log('🔍 可用模型详细信息:', availableModels.value.map(m => ({
-      model_name: m.model_name,
-      model_display_name: m.model_display_name,
-      provider: m.provider
-    })))
+    const options = await configApi.getAnalysisModelOptions()
+    availableModels.value = options.models
+    modelSettings.value.quickAnalysisModel = options.quickModel
+    modelSettings.value.deepAnalysisModel = options.deepModel
   } catch (error) {
-    console.error('加载默认模型配置失败:', error)
-    modelSettings.value.quickAnalysisModel = 'qwen-turbo'
-    modelSettings.value.deepAnalysisModel = 'qwen-max'
+    availableModels.value = []
+    modelSettings.value.quickAnalysisModel = ''
+    modelSettings.value.deepAnalysisModel = ''
+    ElMessage.error('加载厂家和模型配置失败，请稍后重试')
   }
 }
 
@@ -2163,6 +2111,10 @@ const checkModelSuitability = async () => {
 
 // 应用推荐的模型配置
 const applyRecommendedModels = () => {
+  if (!hasSelectedModels(availableModels.value, modelRecommendation.value?.quickModel || '', modelRecommendation.value?.deepModel || '')) {
+    ElMessage.warning('推荐模型尚未配置，请先启用对应厂家和模型')
+    return
+  }
   if (modelRecommendation.value?.quickModel && modelRecommendation.value?.deepModel) {
     modelSettings.value.quickAnalysisModel = modelRecommendation.value.quickModel
     modelSettings.value.deepAnalysisModel = modelRecommendation.value.deepModel

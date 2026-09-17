@@ -4,6 +4,7 @@
 
 import { ApiClient } from './request'
 import type { ApiResponse } from './request'
+import { configuredAnalysisModels, selectAvailableModel } from '@/utils/analysisModels'
 
 // 配置相关类型定义
 
@@ -509,9 +510,27 @@ export const configApi = {
   // 获取默认模型配置
   getDefaultModels(): Promise<{ quick_analysis_model: string; deep_analysis_model: string }> {
     return unwrapResponse(ApiClient.get<Record<string, any>>('/api/config/settings')).then(settings => ({
-      quick_analysis_model: settings.quick_analysis_model || 'qwen-turbo',
-      deep_analysis_model: settings.deep_analysis_model || 'qwen-max'
+      quick_analysis_model: settings.quick_analysis_model || '',
+      deep_analysis_model: settings.deep_analysis_model || ''
     }))
+  },
+
+  // 获取已配置厂家的可用分析模型
+  async getAnalysisModelOptions(): Promise<{
+    models: (LLMConfig & { provider_display_name?: string })[]
+    quickModel: string
+    deepModel: string
+  }> {
+    const [models, providers, defaults] = await Promise.all([
+      configApi.getLLMConfigs(), configApi.getLLMProviders(),
+      configApi.getDefaultModels().catch(() => ({ quick_analysis_model: '', deep_analysis_model: '' }))
+    ])
+    const available = configuredAnalysisModels(models, providers)
+    return {
+      models: available,
+      quickModel: selectAvailableModel(available, defaults.quick_analysis_model),
+      deepModel: selectAvailableModel(available, defaults.deep_analysis_model)
+    }
   },
 
   // 更新系统设置

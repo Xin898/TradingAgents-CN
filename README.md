@@ -608,3 +608,302 @@ SCS 之间不共享数据库，通过显式 API 或版本化事件契约集成�
 [⭐ Star this repo](https://github.com/hsliuping/TradingAgents-CN) | [🍴 Fork this repo](https://github.com/hsliuping/TradingAgents-CN/fork) | [📖 Read the docs](./docs/)
 
 </div>
+
+
+---
+
+## 🏗️ 架构现代化 Case Study（个人学习与系统设计实践）
+
+> 本部分用于记录在现有开源项目基础上的架构分析、工程化改造与系统设计实践。项目中的原始开源代码、版权与许可证边界以仓库现有说明为准；后续新增内容会明确区分“上游开源能力”与“个人新增的架构设计/实现”。
+
+### 🎯 目标
+
+本项目不仅用于功能开发，也作为一个完整的 **Software / Solution Architecture Case Study**。重点不是简单增加功能，而是围绕真实业务场景训练和展示以下能力：
+
+- 理解和评估已有复杂系统
+- 从业务目标与 NFR（非功能性需求）出发设计方案
+- 对技术方案做 Trade-off 分析，而不是只做技术堆叠
+- 处理并发、数据一致性、失败恢复、可观测性和成本问题
+- 通过 ADR（Architecture Decision Record）记录关键架构决策
+- 用可运行实现、测试和指标验证架构判断
+
+### 🧭 计划中的架构演进
+
+#### 1. 重新梳理系统边界
+
+当前核心链路可概括为：
+
+```text
+Vue Frontend
+    ↓
+FastAPI Backend
+    ↓
+Agent Orchestration
+    ↓
+LLM Providers / Market Data Providers
+    ↓
+MongoDB / Redis
+```
+
+后续会进一步明确 Domain Boundary，并评估哪些能力应保持在模块化单体中、哪些适合独立服务：
+
+```text
+API / Backend
+    ├── Analysis Orchestrator
+    ├── Market Data Service
+    ├── Portfolio / Watchlist
+    ├── LLM Gateway
+    ├── Report Service
+    └── Notification Service
+```
+
+重点问题：
+
+- 为什么拆分？
+- 是否真的需要 Microservices？
+- 服务边界如何定义？
+- 谁拥有数据？
+- 如何避免分布式系统复杂度超过收益？
+
+#### 2. 引入 Event-Driven Analysis Pipeline
+
+针对耗时较长的 AI 分析任务，计划对比同步请求与异步事件驱动模式。
+
+目标架构：
+
+```text
+POST /analysis
+      ↓
+Create Analysis Job
+      ↓
+Kafka: analysis.requested
+      ↓
+Worker / Agent Orchestrator
+      ↓
+Kafka: analysis.completed
+      ↓
+MongoDB
+      ↓
+SSE / WebSocket
+      ↓
+Frontend
+```
+
+重点验证：
+
+- Partitioning 与 Ordering
+- Consumer Group 与水平扩展
+- At-least-once 与 Duplicate
+- Idempotent Consumer
+- Retry / Backoff / DLT
+- Backpressure
+- Replay / Recovery
+- Schema Evolution
+
+#### 3. Redis：从“使用缓存”到“设计缓存”
+
+计划将 Redis 用于并验证不同架构场景：
+
+- Market Data Cache
+- LLM Response Cache
+- Analysis Result Cache
+- Rate Limiting
+- Distributed Lock
+
+重点研究：
+
+```text
+TTL
+Cache Invalidation
+Cache Stampede
+Cache Penetration
+Stale Data
+Distributed Lock Expiration
+Lock Ownership
+Fencing Token
+```
+
+尤其会设计失败场景，例如：
+
+```text
+Instance A obtains lock
+→ processing takes 10s
+→ lock TTL expires after 5s
+→ Instance B obtains the lock
+→ both instances can now modify the same resource
+```
+
+并讨论什么时候 Redis Lock 足够、什么时候需要更严格的协调机制。
+
+#### 4. LLM Gateway / AI Platform Layer
+
+计划把 LLM 调用从具体 Agent 中进一步抽象：
+
+```text
+Agents
+   ↓
+LLM Gateway
+   ├── Model Routing
+   ├── Timeout
+   ├── Retry
+   ├── Rate Limiting
+   ├── Token Accounting
+   ├── Fallback
+   ├── Tracing
+   └── Cost Monitoring
+```
+
+目标是系统化回答：
+
+- 如何控制 Token / Model Cost？
+- Provider 故障时如何降级？
+- 如何降低 Vendor Lock-in？
+- 如何追踪单次分析的 LLM latency 与 token usage？
+- 哪些任务需要高能力模型，哪些任务可路由到更便宜模型？
+- 如何限制 Agent Tool 权限与 Side Effects？
+
+#### 5. Observability & Production Engineering
+
+计划建立完整可观测链路：
+
+```text
+analysisId / traceId
+      ↓
+API
+      ↓
+Kafka
+      ↓
+Agent
+      ↓
+LLM
+      ↓
+Market Data
+      ↓
+MongoDB / Redis
+```
+
+关注指标：
+
+- API latency (p50 / p95 / p99)
+- Analysis end-to-end latency
+- LLM latency / error rate
+- Token usage / estimated cost
+- Cache hit ratio
+- Kafka consumer lag
+- Retry / DLT count
+- MongoDB / Redis latency
+- CPU / memory / error rate
+
+候选技术：
+
+- OpenTelemetry
+- Prometheus
+- Grafana
+- Structured Logging
+
+#### 6. Failure Model 与 Recovery
+
+项目会主动设计和验证失败场景，而不是只验证 happy path：
+
+- MongoDB 暂时不可用
+- Redis cache miss / Redis outage
+- Kafka consumer crash
+- LLM Provider timeout
+- Duplicate event
+- Out-of-order event
+- Worker restart
+- Partial failure between persistence and message publishing
+
+目标是明确：
+
+```text
+Timeout
+Retry
+Idempotency
+Circuit Breaker
+Outbox
+Replay
+Recovery
+Fallback
+Degraded Mode
+```
+
+### 📐 Architecture Documentation
+
+计划逐步补充以下架构文档：
+
+```text
+docs/architecture/
+├── 01-current-state.md
+├── 02-target-architecture.md
+├── 03-domain-boundaries.md
+├── 04-data-flow.md
+├── 05-failure-model.md
+├── 06-scalability.md
+├── 07-security.md
+├── 08-observability.md
+├── 09-capacity-estimation.md
+└── adr/
+    ├── ADR-001-kafka-for-analysis-jobs.md
+    ├── ADR-002-mongodb-vs-postgresql.md
+    ├── ADR-003-redis-cache-strategy.md
+    ├── ADR-004-llm-gateway.md
+    ├── ADR-005-sync-vs-async.md
+    └── ADR-006-modular-monolith-vs-microservices.md
+```
+
+每个 ADR 将尽量保持统一结构：
+
+```text
+Context
+→ Problem
+→ Requirements
+→ Options
+→ Advantages / Disadvantages
+→ Decision
+→ Why
+→ Consequences
+→ When would we reconsider?
+```
+
+### 🔄 Architecture Evolution，而不是一次性“完美设计”
+
+本 Case Study 会刻意记录系统从简单方案向更复杂方案演进的原因：
+
+```text
+V1  Synchronous Processing
+    ↓
+V2  Async / Kafka
+    ↓
+V3  Idempotency + Retry + DLT
+    ↓
+V4  Replay / Recovery
+    ↓
+V5  Observability + SLO
+    ↓
+V6  LLM Gateway + Cost / Provider Governance
+```
+
+每一步都要求能够回答：
+
+1. 当前版本解决了什么问题？
+2. 为什么需要下一步演进？
+3. 替代方案是什么？
+4. 新方案引入了什么复杂度？
+5. 如何通过测试和指标证明它值得？
+
+### ✅ 最终希望展示的能力
+
+```text
+1. Understand an existing complex system
+2. Identify architectural weaknesses
+3. Define functional and non-functional requirements
+4. Evaluate alternatives and trade-offs
+5. Make and document architecture decisions
+6. Implement critical parts of the design
+7. Test failure and recovery scenarios
+8. Measure performance and operational behavior
+9. Explain the architecture to technical and non-technical stakeholders
+```
+
+这个项目的目标不是证明“所有代码都是从零写的”，而是透明地展示：**如何基于一个真实且复杂的开源系统，完成架构评估、关键设计决策、工程化实现与生产级改进。**
